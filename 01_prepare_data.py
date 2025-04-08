@@ -9,4 +9,4 @@ if __name__ == "__main__":
     with open("./cfg/config.yaml", "r") as f:
         config = yaml.load(f, Loader=yaml.CLoader)
 
-    initial_prep(**config["data_config"])
+    initial_prep(config["prepared_data_path"], **config["preparation_params"])

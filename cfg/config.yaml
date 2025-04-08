@@ -1,0 +1,42 @@
+# Things that are shared between multiple steps should be at the top level.
+
+# Random seed for reproducibility
+random_seed: 9
+
+# Where is prepared data
+prepared_data_path: ./data/prepared_data.parquet
+
+input_columns:
+    - [player_name, categorical, {}]
+    - [balls, categorical, {}]
+    - [strikes, categorical, {}]
+    - [at_bat_number, numeric, {}]
+
+preparation_params:
+  start_date: "2024-01-01"
+  end_date: "2024-12-31"
+
+dataset_params:
+  keys:
+    - game_pk
+    - pitch_number
+
+dataloader_params:
+  # Generic examples.
+  batch_size: 4096
+  num_workers: 4
+
+trainer_params:
+  precision: bf16-mixed
+  max_epochs: 16
+  accumulate_grad_batches: 1
+  log_every_n_steps: 20
+
+model_params:
+  embedder_size: 64
+
+optimizer_params:
+  # These are just the Adam defaults.
+  lr: 0.03
+  betas: [0.9, 0.999]
+  weight_decay: 0

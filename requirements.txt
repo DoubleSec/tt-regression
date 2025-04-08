@@ -1,7 +1,9 @@
-# Obviously you might want specific versions here.
 torch
 polars
 lightning
-yaml
-# Obviously optional, but I like it
+pyyaml
+pybaseball
 black
+logzero
+morphers
+tensorboard

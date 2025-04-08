@@ -6,15 +6,18 @@ Other network modules, etc. can go here or not, depending on how confusing it is
 from typing import Any
 
 import torch
+from torch import nn
 import lightning.pytorch as pl
+from torchmetrics.regression import R2Score
 
 
-class WhateverModel(pl.LightningModule):
-    """Model for whatever we're doing."""
+class DotProductRegression(pl.LightningModule):
+    """Super simplified two-tower model for regression problem."""
 
     def __init__(
         self,
-        model_params: dict[str, Any],
+        morphers: dict[str, dict[str, Any]],
+        embedder_size: int,
         optimizer_params: dict[str, Any],
     ):
         """Initialize the model."""
@@ -22,7 +25,32 @@ class WhateverModel(pl.LightningModule):
         self.save_hyperparameters(logger=False)
         self.optimizer_params = optimizer_params
 
-        raise NotImplementedError
+        self.input_embedders = nn.ModuleDict(
+            {
+                feature: morpher.make_embedding(embedder_size)
+                for feature, morpher in morphers["input"].items()
+            }
+        )
+        self.input_projector = nn.Sequential(
+            nn.LayerNorm(embedder_size),
+            nn.ReLU(),
+            nn.Linear(embedder_size, embedder_size),
+        )
+
+        self.query_embedders = nn.ModuleDict(
+            {
+                feature: morpher.make_embedding(embedder_size)
+                for feature, morpher in morphers["query"].items()
+            }
+        )
+        self.query_projector = nn.Sequential(
+            nn.LayerNorm(embedder_size),
+            nn.ReLU(),
+            nn.Linear(embedder_size, embedder_size),
+        )
+
+        # Metric
+        self.r2 = R2Score()
 
     def configure_optimizers(self):
         """Lightning hook for optimizer setup.
@@ -43,7 +71,22 @@ class WhateverModel(pl.LightningModule):
         Returns whatever the output of the model is.
         """
 
-        raise NotImplementedError
+        x_input = sum(
+            embedder(x[feature]) for feature, embedder in self.input_embedders.items()
+        )
+        x_input = self.input_projector(x_input)
+
+        x_query = sum(
+            embedder(x[feature]) for feature, embedder in self.query_embedders.items()
+        )
+        x_query = self.query_projector(x_query)
+        # We only care about direction for this one.
+        x_query = nn.functional.normalize(x_query, p=2.0, dim=-1)
+
+        # Dot product
+        x = (x_input * x_query).sum(dim=-1)
+
+        return x
 
     def step(self, stage: str, x: dict[str, torch.Tensor]) -> torch.Tensor:
         """Generic step for training or validation, assuming they're similar.
@@ -51,10 +94,18 @@ class WhateverModel(pl.LightningModule):
         - stage: one of "train" or "valid"
         - x: dictionary of torch tensors, input to model, targets, etc.
 
-        This MUST log "validation_loss" during the validation step in order to have the model checkpointing work as written.
+        This MUST log "valid_loss" during the validation step in order to have the model checkpointing work as written.
 
         Returns loss as one-element tensor.
         """
+
+        y_true = x["release_speed"]
+        y_pred = self(x)
+
+        loss = nn.functional.mse_loss(y_pred, y_true)
+        self.log(f"{stage}_loss", loss)
+        self.log(f"{stage}_R2", self.r2(y_pred, y_true))
+        return loss
 
     def training_step(self, x: dict[str, torch.Tensor]) -> torch.Tensor:
         """Lightning hook for training."""
